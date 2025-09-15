@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candle Countdown</title>
+    <style>
+        /* --- Page Setup --- */
+        :root {
+            --candle-height: 300px;
+            --candle-width: 100px;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column; /* To stack setup UI and candle */
+            min-height: 100vh;
+            margin: 0;
+            background-color: #1a1a2e;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #f0f0f0;
+        }
+        
+        /* --- Setup UI --- */
+        #setup-container {
+            text-align: center;
+            margin-bottom: 30px;
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+
+        #setup-container.hidden {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+            position: absolute;
+        }
+
+        #setup-container label {
+            font-size: 1.2em;
+            margin-right: 10px;
+        }
+
+        #minutes-input {
+            width: 80px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: 1px solid #4f4f6e;
+            background-color: #2c2c44;
+            color: #fff;
+            font-size: 1.2em;
+            text-align: center;
+        }
+
+        .action-button {
+            padding: 10px 20px;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #fff;
+            background: #4a4a88;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            transition: background-color 0.2s;
+        }
+        
+        .action-button:hover {
+            background: #6a6ad5;
+        }
+
+        #reset-button {
+            margin-top: 20px;
+            background: #884a4a;
+        }
+
+        #reset-button:hover {
+            background: #d56a6a;
+        }
+        
+        /* --- Main Container --- */
+        .candle-container {
+            position: relative;
+            cursor: pointer;
+            width: var(--candle-width);
+            height: calc(var(--candle-height) + 50px); /* Candle height + flame area */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        /* --- Countdown Timer Display (Visible on Hover) --- */
+        .timer-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 2em;
+            font-weight: bold;
+            letter-spacing: 2px;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            z-index: 10;
+            pointer-events: none; /* Allows hover to pass through to candle */
+        }
+
+        .candle-container.running:hover .timer-display {
+            opacity: 1;
+        }
+        
+        /* --- Flame & Wick Assembly --- */
+        .flame-assembly {
+            position: absolute;
+            bottom: var(--candle-height); 
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 40px;
+            transition: bottom 1s linear; /* Smoothly moves down as candle burns */
+            opacity: 0; /* Unlit by default */
+        }
+        
+        .flame-assembly.lit {
+            opacity: 1;
+            transition: opacity 0.5s ease-in 0.2s;
+        }
+
+        .wick {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 10px;
+            background-color: #333;
+            border-radius: 2px 2px 0 0;
+            transition: opacity 0.3s;
+        }
+
+        .flame {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform-origin: bottom center;
+            width: 20px;
+            height: 30px;
+            background-color: #ffcf80;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            box-shadow: 0 0 15px #ffab00, 0 0 30px #ff7b00, 0 0 50px #ff5400;
+            animation: flicker 1.5s ease-in-out infinite;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+
+        .extinguished .flame {
+            transform: scale(0);
+            opacity: 0;
+            animation: none;
+        }
+
+        .extinguished .wick {
+            opacity: 0;
+        }
+
+        .smoke {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: #555;
+            border-radius: 50%;
+            opacity: 0;
+        }
+
+        .extinguished .smoke {
+            animation: puff-of-smoke 2s ease-out forwards;
+        }
+        
+        /* --- Candle Body --- */
+        .candle-wax {
+            position: absolute;
+            bottom: 0;
+            width: var(--candle-width);
+            height: var(--candle-height);
+            background: linear-gradient(to right, #f7f7f0, #ffffff, #f7f7f0);
+            border-radius: 8px 8px 0 0;
+            box-shadow: inset -5px 0 10px rgba(0, 0, 0, 0.1), 0 5px 10px rgba(0,0,0,0.3);
+            transition: height 1s linear;
+        }
+        
+        /* --- Keyframe Animations --- */
+        @keyframes flicker {
+            0%, 100% { transform: scale(1, 1) rotate(0deg); box-shadow: 0 0 15px #ffab00, 0 0 30px #ff7b00, 0 0 50px #ff5400; }
+            50% { transform: scale(1.1, 0.9) rotate(-2deg) translateX(2px); box-shadow: 0 0 20px #ffc300, 0 0 40px #ff8800, 0 0 60px #ff6600; }
+        }
+
+        @keyframes puff-of-smoke {
+            0% { transform: scale(1) translateY(0); opacity: 0.8; }
+            100% { transform: scale(3) translateY(-40px); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="setup-container">
+    <div>
+        <label for="minutes-input">Set Timer (minutes):</label>
+        <input type="number" id="minutes-input" value="1.5" step="0.5" min="0.1">
+        <button id="start-button" class="action-button">Light Candle</button>
+    </div>
+    <button id="reset-button" class="action-button hidden">Reset</button>
+</div>
+
+<div class="candle-container" id="candleContainer">
+    <div class="timer-display" id="timerDisplay">00:00</div>
+    
+    <div class="flame-assembly" id="flameAssembly">
+        <div class="wick"></div>
+        <div class="flame"></div>
+        <div class="smoke"></div>
+    </div>
+    
+    <div class="candle-wax" id="candleWax"></div>
+</div>
+
+<script>
+    // --- Element Selection ---
+    const setupContainer = document.getElementById('setup-container');
+    const minutesInput = document.getElementById('minutes-input');
+    const startButton = document.getElementById('start-button');
+    const resetButton = document.getElementById('reset-button');
+    
+    const candleContainer = document.getElementById('candleContainer');
+    const candleWax = document.getElementById('candleWax');
+    const flameAssembly = document.getElementById('flameAssembly');
+    const timerDisplay = document.getElementById('timerDisplay');
+
+    let countdownInterval = null;
+    const initialCandleHeight = 300; // Corresponds to --candle-height in CSS
+
+    // --- Event Listeners ---
+    startButton.addEventListener('click', startCountdown);
+    resetButton.addEventListener('click', resetState);
+
+    function startCountdown() {
+        const countdownMinutes = parseFloat(minutesInput.value);
+
+        if (isNaN(countdownMinutes) || countdownMinutes <= 0) {
+            alert("Please enter a valid, positive number of minutes.");
+            return;
+        }
+
+        // --- UI State Change ---
+        setupContainer.classList.add('hidden');
+        resetButton.classList.remove('hidden');
+        flameAssembly.classList.add('lit');
+        candleContainer.classList.add('running');
+
+        // --- Timer Logic ---
+        const totalTimeInSeconds = countdownMinutes * 60;
+        let remainingSeconds = totalTimeInSeconds;
+
+        // Immediately update display to show the starting time
+        updateDisplayAndCandle(remainingSeconds, totalTimeInSeconds);
+
+        countdownInterval = setInterval(() => {
+            remainingSeconds--;
+            updateDisplayAndCandle(remainingSeconds, totalTimeInSeconds);
+
+            if (remainingSeconds <= 0) {
+                clearInterval(countdownInterval);
+                extinguishCandle();
+            }
+        }, 1000);
+    }
+
+    function updateDisplayAndCandle(currentSeconds, totalSeconds) {
+        // 1. Update the visual countdown timer
+        const minutes = Math.floor(currentSeconds / 60);
+        const seconds = currentSeconds % 60;
+        timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        
+        // 2. Calculate the percentage of time remaining and update candle
+        const percentageRemaining = Math.max(0, currentSeconds / totalSeconds);
+        const newCandleHeight = initialCandleHeight * percentageRemaining;
+        candleWax.style.height = `${newCandleHeight}px`;
+        flameAssembly.style.bottom = `${newCandleHeight}px`;
+    }
+
+    function extinguishCandle() {
+        flameAssembly.classList.add('extinguished');
+        timerDisplay.textContent = "Time's Up!";
+        timerDisplay.style.opacity = '1';
+        candleContainer.classList.remove('running');
+    }
+
+    function resetState() {
+        // Clear any running timer
+        clearInterval(countdownInterval);
+
+        // Reset UI visibility
+        setupContainer.classList.remove('hidden');
+        resetButton.classList.add('hidden');
+        
+        // Reset candle visual state
+        flameAssembly.classList.remove('lit', 'extinguished');
+        candleContainer.classList.remove('running');
+        timerDisplay.style.opacity = '0';
+        
+        // Use a short timeout to allow transitions to reset properly
+        setTimeout(() => {
+            candleWax.style.transition = 'none'; // Disable transition for instant reset
+            flameAssembly.style.transition = 'none';
+            
+            candleWax.style.height = `${initialCandleHeight}px`;
+            flameAssembly.style.bottom = `${initialCandleHeight}px`;
+            
+            // Re-enable transitions after the reset
+            setTimeout(() => {
+                candleWax.style.transition = 'height 1s linear';
+                flameAssembly.style.transition = 'bottom 1s linear';
+            }, 50);
+        }, 100);
+    }
+</script>
+
+</body>
+</html>
