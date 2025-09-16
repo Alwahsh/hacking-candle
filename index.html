@@ -29,6 +29,7 @@
             text-align: center;
             margin-bottom: 30px;
             transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+            height: 80px; /* Give it a fixed height to prevent layout shift */
         }
 
         #setup-container.hidden {
@@ -63,12 +64,15 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            margin-left: 10px;
             transition: background-color 0.2s;
         }
         
         .action-button:hover {
             background: #6a6ad5;
+        }
+
+        #start-button {
+             margin-left: 10px;
         }
 
         #reset-button {
@@ -78,6 +82,10 @@
 
         #reset-button:hover {
             background: #d56a6a;
+        }
+
+        #light-another-button {
+             margin-top: 20px;
         }
         
         /* --- Main Container --- */
@@ -114,6 +122,11 @@
             opacity: 1;
         }
         
+        /* This class forces the display to be visible, used when timer finishes */
+        .timer-display.visible {
+            opacity: 1;
+        }
+        
         /* --- Flame & Wick Assembly --- */
         .flame-assembly {
             position: absolute;
@@ -122,13 +135,13 @@
             transform: translateX(-50%);
             width: 20px;
             height: 40px;
-            transition: bottom 1s linear; /* Smoothly moves down as candle burns */
+            transition: bottom 1s linear; /* Default transition for reset */
             opacity: 0; /* Unlit by default */
         }
         
         .flame-assembly.lit {
             opacity: 1;
-            transition: opacity 0.5s ease-in 0.2s;
+            transition: opacity 0.5s ease-in 0.2s, bottom 1s linear;
         }
 
         .wick {
@@ -191,7 +204,40 @@
             background: linear-gradient(to right, #f7f7f0, #ffffff, #f7f7f0);
             border-radius: 8px 8px 0 0;
             box-shadow: inset -5px 0 10px rgba(0, 0, 0, 0.1), 0 5px 10px rgba(0,0,0,0.3);
-            transition: height 1s linear;
+            transition: height 1s linear; /* Default transition for reset */
+        }
+
+        /* --- Stats Display --- */
+        #stats-container {
+            margin-top: 30px;
+            padding: 10px 20px;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            font-size: 1em;
+            color: #aab;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        #reset-stats-button {
+            padding: 5px 10px;
+            font-size: 0.8em;
+            background: #616161;
+            border: none;
+            border-radius: 4px;
+            color: #ddd;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #reset-stats-button:hover {
+            background: #7a7a7a;
+        }
+
+        .hidden {
+            display: none !important;
         }
         
         /* --- Keyframe Animations --- */
@@ -209,12 +255,15 @@
 <body>
 
 <div id="setup-container">
-    <div>
+    <div id="timer-setup">
         <label for="minutes-input">Set Timer (minutes):</label>
-        <input type="number" id="minutes-input" value="25" step="0.5" min="0.1">
+        <input type="number" id="minutes-input" value="25" step="0.1" min="0.1">
         <button id="start-button" class="action-button">Light Candle</button>
     </div>
-    <button id="reset-button" class="action-button hidden">Reset</button>
+    <div id="controls">
+        <button id="reset-button" class="action-button hidden">Reset</button>
+        <button id="light-another-button" class="action-button hidden">Light Another Candle</button>
+    </div>
 </div>
 
 <div class="candle-container" id="candleContainer">
@@ -229,25 +278,44 @@
     <div class="candle-wax" id="candleWax"></div>
 </div>
 
+<div id="stats-container">
+    <span id="stats-text">Loading stats...</span>
+    <button id="reset-stats-button">Reset</button>
+</div>
+
+
 <script>
     // --- Element Selection ---
     const setupContainer = document.getElementById('setup-container');
+    const timerSetup = document.getElementById('timer-setup');
     const minutesInput = document.getElementById('minutes-input');
     const startButton = document.getElementById('start-button');
     const resetButton = document.getElementById('reset-button');
+    const lightAnotherButton = document.getElementById('light-another-button');
     
     const candleContainer = document.getElementById('candleContainer');
     const candleWax = document.getElementById('candleWax');
     const flameAssembly = document.getElementById('flameAssembly');
     const timerDisplay = document.getElementById('timerDisplay');
+    
+    const statsContainer = document.getElementById('stats-container');
+    const statsText = document.getElementById('stats-text');
+    const resetStatsButton = document.getElementById('reset-stats-button');
 
+    // --- Audio Setup ---
+    const extinguishSound = new Audio('https://cdn.pixabay.com/download/audio/2022/03/15/audio_249072b988.mp3');
+
+    // --- State Variables ---
     let countdownInterval = null;
     const initialCandleHeight = 300; // Corresponds to --candle-height in CSS
 
     // --- Event Listeners ---
     startButton.addEventListener('click', startCountdown);
     resetButton.addEventListener('click', resetState);
+    lightAnotherButton.addEventListener('click', resetState); // Does the same as reset
+    resetStatsButton.addEventListener('click', resetStats);
 
+    // --- Main Functions ---
     function startCountdown() {
         const countdownMinutes = parseFloat(minutesInput.value);
 
@@ -256,78 +324,141 @@
             return;
         }
 
+        const totalTimeInSeconds = countdownMinutes * 60;
+        
         // --- UI State Change ---
-        setupContainer.classList.add('hidden');
+        timerSetup.classList.add('hidden');
         resetButton.classList.remove('hidden');
         flameAssembly.classList.add('lit');
         candleContainer.classList.add('running');
 
-        // --- Timer Logic ---
-        const totalTimeInSeconds = countdownMinutes * 60;
-        let remainingSeconds = totalTimeInSeconds;
+        // --- Visual Animation ---
+        // Set the transition duration to the total countdown time for a single, smooth animation.
+        candleWax.style.transition = `height ${totalTimeInSeconds}s linear`;
+        flameAssembly.style.transitionProperty = 'bottom';
+        flameAssembly.style.transitionDuration = `${totalTimeInSeconds}s`;
+        flameAssembly.style.transitionTimingFunction = 'linear';
 
-        // Immediately update display to show the starting time
-        updateDisplayAndCandle(remainingSeconds, totalTimeInSeconds);
+        // Trigger the animation by setting the final state.
+        // A tiny delay ensures the browser applies the new transition duration before the change.
+        setTimeout(() => {
+            candleWax.style.height = '0px';
+            flameAssembly.style.bottom = '0px';
+        }, 100);
+
+        // --- Text Timer Logic ---
+        let remainingSeconds = totalTimeInSeconds;
+        updateDisplayAndCandle(remainingSeconds); // Initial display
 
         countdownInterval = setInterval(() => {
             remainingSeconds--;
-            updateDisplayAndCandle(remainingSeconds, totalTimeInSeconds);
+            updateDisplayAndCandle(remainingSeconds);
 
-            if (remainingSeconds <= 0) {
+            if (remainingSeconds < 0) {
                 clearInterval(countdownInterval);
                 extinguishCandle();
             }
         }, 1000);
     }
 
-    function updateDisplayAndCandle(currentSeconds, totalSeconds) {
-        // 1. Update the visual countdown timer
-        const minutes = Math.floor(currentSeconds / 60);
-        const seconds = currentSeconds % 60;
+    function updateDisplayAndCandle(currentSeconds) {
+        // This function now ONLY updates the text display.
+        const safeSeconds = Math.max(0, currentSeconds);
+        const minutes = Math.floor(safeSeconds / 60);
+        const seconds = safeSeconds % 60;
         timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        
-        // 2. Calculate the percentage of time remaining and update candle
-        const percentageRemaining = Math.max(0, currentSeconds / totalSeconds);
-        const newCandleHeight = initialCandleHeight * percentageRemaining;
-        candleWax.style.height = `${newCandleHeight}px`;
-        flameAssembly.style.bottom = `${newCandleHeight}px`;
     }
 
     function extinguishCandle() {
+        extinguishSound.play();
         flameAssembly.classList.add('extinguished');
         timerDisplay.textContent = "Time's Up!";
-        timerDisplay.style.opacity = '1';
-        candleContainer.classList.remove('running');
+        timerDisplay.classList.add('visible');
+        
+        resetButton.classList.add('hidden');
+        lightAnotherButton.classList.remove('hidden');
+        
+        updateConsumptionStats();
     }
 
     function resetState() {
-        // Clear any running timer
         clearInterval(countdownInterval);
 
-        // Reset UI visibility
-        setupContainer.classList.remove('hidden');
+        // --- Reset UI classes ---
+        timerSetup.classList.remove('hidden');
         resetButton.classList.add('hidden');
-        
-        // Reset candle visual state
+        lightAnotherButton.classList.add('hidden');
         flameAssembly.classList.remove('lit', 'extinguished');
         candleContainer.classList.remove('running');
-        timerDisplay.style.opacity = '0';
+        timerDisplay.classList.remove('visible');
         
-        // Use a short timeout to allow transitions to reset properly
+        // --- Reset Visuals ---
+        // Temporarily disable transitions to snap the candle back to its initial state instantly.
+        candleWax.style.transition = 'none';
+        flameAssembly.style.transition = 'none';
+        
+        candleWax.style.height = `${initialCandleHeight}px`;
+        flameAssembly.style.bottom = `${initialCandleHeight}px`;
+        
+        // After a very short delay, remove the inline transition styles.
+        // This makes the elements fall back to the default transitions defined in the CSS stylesheet.
         setTimeout(() => {
-            candleWax.style.transition = 'none'; // Disable transition for instant reset
-            flameAssembly.style.transition = 'none';
-            
-            candleWax.style.height = `${initialCandleHeight}px`;
-            flameAssembly.style.bottom = `${initialCandleHeight}px`;
-            
-            // Re-enable transitions after the reset
-            setTimeout(() => {
-                candleWax.style.transition = 'height 1s linear';
-                flameAssembly.style.transition = 'bottom 1s linear';
-            }, 50);
-        }, 100);
+            candleWax.style.transition = '';
+            flameAssembly.style.transition = '';
+        }, 50);
     }
+
+    // --- localStorage Statistics Functions ---
+    function resetStats() {
+        if (confirm('Are you sure you want to reset all your candle stats? This cannot be undone.')) {
+            localStorage.removeItem('totalCandlesConsumed');
+            localStorage.removeItem('dailyCandleStats');
+            displayStats();
+        }
+    }
+
+    function getTodayDateString() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function updateConsumptionStats() {
+        let totalCount = parseInt(localStorage.getItem('totalCandlesConsumed')) || 0;
+        totalCount++;
+        localStorage.setItem('totalCandlesConsumed', totalCount);
+
+        const todayStr = getTodayDateString();
+        let dailyStats = JSON.parse(localStorage.getItem('dailyCandleStats'));
+
+        if (!dailyStats || dailyStats.date !== todayStr) {
+            dailyStats = { date: todayStr, count: 1 };
+        } else {
+            dailyStats.count++;
+        }
+        localStorage.setItem('dailyCandleStats', JSON.stringify(dailyStats));
+        
+        displayStats();
+    }
+    
+    function displayStats() {
+        const totalCount = localStorage.getItem('totalCandlesConsumed') || 0;
+        const dailyStats = JSON.parse(localStorage.getItem('dailyCandleStats'));
+        const todayStr = getTodayDateString();
+        
+        let todaysCount = 0;
+        if (dailyStats && dailyStats.date === todayStr) {
+            todaysCount = dailyStats.count;
+        }
+
+        statsText.innerHTML = `🔥 Today's Candles: <strong>${todaysCount}</strong> | Total: <strong>${totalCount}</strong>`;
+    }
+
+    // --- Initial Load ---
+    displayStats();
+
 </script>
 
 </body>
